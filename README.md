@@ -87,6 +87,16 @@ flowchart LR
 
 **Firebase**는 Google이 제공하는 앱 개발 플랫폼 전체를 뜻한다. 인증, 데이터베이스, 호스팅 등 여러 제품을 포함한다. **Cloud Firestore**는 그중 문서 형태로 데이터를 저장하는 관리형 NoSQL 데이터베이스다. 이 프로젝트는 Firebase 전체 기능 중 Firestore를 사용하며, `data` 컬렉션에는 거래를, `conversations` 컬렉션에는 대화와 메시지를 저장한다.
 
+Render와 Firebase는 서로 대신 선택한 서비스가 아니다.
+
+| 서비스 | 이 프로젝트의 역할 | 저장하거나 실행하는 것 |
+|---|---|---|
+| Render | 백엔드 실행 환경 | FastAPI·Uvicorn Python 프로세스 |
+| Firebase | Google의 앱 개발 플랫폼 | Firestore 등 여러 제품을 묶어 제공 |
+| Firestore | Firebase에서 사용하는 데이터베이스 | 거래 문서와 대화 문서 |
+
+Firebase가 무료로 사용할 수 없어서 Render를 선택한 것은 아니다. 과제 조건이 **백엔드는 Render, 데이터베이스는 Firestore**로 지정되어 있어 두 서비스를 함께 사용했다. Firestore에는 [무료 사용량](https://firebase.google.com/docs/firestore/quotas)이 있어 현재 학습용 데이터 규모에서는 무료 범위로 사용할 수 있다. Firebase의 Cloud Functions로 백엔드를 만드는 방법도 있지만, 함수 배포에는 [Blaze 요금제와 결제 계정이 필요](https://firebase.google.com/docs/functions/get-started)하고 이번 과제의 Render 배포 조건에도 맞지 않는다.
+
 Firestore는 서버 설치·패치·백업 장비를 직접 운영하지 않아도 되는 관리형 서비스다. 이런 실행 방식을 넓은 의미에서 **서버리스**라고 한다. 서버리스는 서버가 없다는 뜻이 아니라 사용자가 서버 운영을 직접 관리하지 않는다는 뜻이다. Vercel의 정적 배포와 Firestore는 서버리스 성격이 강하지만, 이 프로젝트의 Render 백엔드는 Uvicorn 프로세스를 계속 실행하는 관리형 웹 서비스이므로 엄밀히는 일반적인 함수형 서버리스와 다르다.
 
 무료 Render 인스턴스는 일정 시간 요청이 없으면 잠들 수 있다. 다음 요청에서 실행 환경과 앱을 다시 시작하는 시간이 **콜드 스타트**다. 이때 첫 응답이 수십 초 늦어질 수 있어 화면은 3초 이상 지연되면 안내를 표시한다. `서버 깨우기` 버튼은 `/health`를 호출하고, 준비가 끝나면 현재 화면의 데이터를 다시 불러온다.
