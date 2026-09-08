@@ -16,8 +16,8 @@ class Settings:
     firebase_service_account_json: str | None = None
     codyssey_api_key: str | None = None
     codyssey_base_url: str = "https://copa.codyssey.kr/v1"
-    codyssey_model: str = "gpt-5-mini"
-    max_ai_output_tokens: int = 300
+    codyssey_model: str = "gpt-5.4-mini"
+    max_ai_output_tokens: int = 500
     allowed_origins: tuple[str, ...] = ("http://localhost:5173",)
 
 
@@ -33,8 +33,7 @@ def get_settings() -> Settings:
         firebase_service_account_json=os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON"),
         codyssey_api_key=os.getenv("CODYSSEY_API_KEY") or os.getenv("OPENAI_API_KEY"),
         codyssey_base_url=os.getenv("CODYSSEY_BASE_URL", "https://copa.codyssey.kr/v1").rstrip("/"),
-        codyssey_model=os.getenv("CODYSSEY_MODEL", "gpt-5-mini"),
-        max_ai_output_tokens=max(50, min(int(os.getenv("MAX_AI_OUTPUT_TOKENS", "300")), 1000)),
+        codyssey_model=os.getenv("CODYSSEY_MODEL", "gpt-5.4-mini"),
+        max_ai_output_tokens=max(50, min(int(os.getenv("MAX_AI_OUTPUT_TOKENS", "500")), 1000)),
         allowed_origins=origins,
     )
-

@@ -46,28 +46,28 @@
           </form>
 
           <div class="metric-grid" aria-live="polite">
-            <article class="metric-card accent-green"><span>총수입</span><strong id="totalIncome">—</strong><small id="incomeCount">수입 거래</small></article>
-            <article class="metric-card accent-coral"><span>총지출</span><strong id="totalExpense">—</strong><small id="expenseCount">지출 거래</small></article>
-            <article class="metric-card accent-purple"><span>남은 금액</span><strong id="balance">—</strong><small id="periodLabel">조회 기간</small></article>
-            <article class="metric-card accent-blue"><span>최근 흐름</span><strong class="text-metric" id="trend">—</strong><small>전월 대비 소비</small></article>
+            <article class="metric-card accent-green"><span class="metric-label">총수입 <button class="info-button" type="button" data-metric-info="income" aria-label="총수입 설명">i</button></span><strong id="totalIncome">—</strong><small id="incomeCount">수입 거래</small></article>
+            <article class="metric-card accent-coral"><span class="metric-label">총지출 <button class="info-button" type="button" data-metric-info="expense" aria-label="총지출 설명">i</button></span><strong id="totalExpense">—</strong><small id="expenseCount">지출 거래</small></article>
+            <article class="metric-card accent-purple"><span class="metric-label">남은 금액 <button class="info-button" type="button" data-metric-info="balance" aria-label="남은 금액 설명">i</button></span><strong id="balance">—</strong><small id="periodLabel">조회 기간</small></article>
+            <article class="metric-card accent-blue"><span class="metric-label">최근 흐름 <button class="info-button" type="button" data-metric-info="trend" aria-label="최근 흐름 설명">i</button></span><strong class="text-metric" id="trend">—</strong><small>전월 대비 소비</small></article>
           </div>
 
           <div class="dashboard-grid">
             <article class="panel chart-panel">
-              <div class="panel-heading"><div><p class="eyebrow">CASH FLOW</p><h2>월별 수입과 지출</h2></div><span class="no-token-badge">AI 토큰 0</span></div>
+              <div class="panel-heading"><div><p class="eyebrow">CASH FLOW</p><h2>월별 수입과 지출</h2><p class="filter-context" id="cashflowFilterContext">전체 기간 · 전체 카테고리</p></div><span class="no-token-badge">AI 토큰 0</span></div>
               <div class="chart-frame"><div class="chart-loader" id="chartLoader">그래프를 만드는 중입니다…</div><img id="cashflowChart" alt="월별 수입과 지출 그래프" /></div>
             </article>
             <article class="panel insight-panel">
-              <div class="panel-heading"><div><p class="eyebrow">KEY RATIOS</p><h2>소비 건강 지표</h2></div></div>
+              <div class="panel-heading"><div><p class="eyebrow">KEY RATIOS</p><h2>소비 건강 지표</h2><p class="filter-context" id="ratiosFilterContext">전체 기간 · 전체 카테고리</p></div></div>
               <div class="ratio-list">
-                <div><span>엥겔지수</span><strong id="engelIndex">—</strong><div class="progress"><i id="engelBar"></i></div></div>
-                <div><span>주거비 비중</span><strong id="housingRatio">—</strong><div class="progress"><i id="housingBar"></i></div></div>
-                <div><span>고정비 부담률</span><strong id="fixedRatio">—</strong><div class="progress"><i id="fixedBar"></i></div></div>
-                <div><span>선택소비 비중</span><strong id="discretionaryRatio">—</strong><div class="progress"><i id="discretionaryBar"></i></div></div>
+                <div><span class="metric-label">엥겔지수 <button class="info-button" type="button" data-metric-info="engel" aria-label="엥겔지수 설명">i</button></span><strong id="engelIndex">—</strong><div class="progress"><i id="engelBar"></i></div></div>
+                <div><span class="metric-label">주거비 비중 <button class="info-button" type="button" data-metric-info="housing" aria-label="주거비 비중 설명">i</button></span><strong id="housingRatio">—</strong><div class="progress"><i id="housingBar"></i></div></div>
+                <div><span class="metric-label">고정비 부담률 <button class="info-button" type="button" data-metric-info="fixed" aria-label="고정비 부담률 설명">i</button></span><strong id="fixedRatio">—</strong><div class="progress"><i id="fixedBar"></i></div></div>
+                <div><span class="metric-label">선택소비 비중 <button class="info-button" type="button" data-metric-info="discretionary" aria-label="선택소비 비중 설명">i</button></span><strong id="discretionaryRatio">—</strong><div class="progress"><i id="discretionaryBar"></i></div></div>
               </div>
             </article>
             <article class="panel category-panel">
-              <div class="panel-heading"><div><p class="eyebrow">TOP CATEGORIES</p><h2>카테고리별 지출</h2></div><strong id="propensity">소비성향 —</strong></div>
+              <div class="panel-heading"><div><p class="eyebrow">TOP CATEGORIES</p><h2>카테고리별 지출</h2></div><div class="propensity-label"><strong id="propensity">소비성향 —</strong><button class="info-button" type="button" data-metric-info="propensity" aria-label="평균소비성향 설명">i</button></div></div>
               <div id="categoryBreakdown" class="category-breakdown"></div>
             </article>
           </div>
@@ -126,6 +126,15 @@
         </div>
         <div class="dialog-actions"><button class="secondary-button dialog-close" type="button">취소</button><button class="primary-button" id="saveTransactionButton" type="submit">저장</button></div>
       </form>
+    </dialog>
+
+    <dialog id="metricInfoDialog">
+      <article class="dialog-card">
+        <div class="dialog-heading"><div><p class="eyebrow">METRIC GUIDE</p><h2 id="metricInfoTitle">지표 설명</h2></div><button class="icon-button metric-info-close" type="button" aria-label="닫기">×</button></div>
+        <p class="metric-info-description" id="metricInfoDescription"></p>
+        <div class="metric-formula"><strong>계산 기준</strong><span id="metricInfoFormula"></span></div>
+        <div class="dialog-actions"><button class="primary-button metric-info-close" type="button">확인</button></div>
+      </article>
     </dialog>
 
     <div class="toast" id="toast" role="status"></div>

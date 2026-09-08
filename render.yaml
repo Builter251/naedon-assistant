@@ -16,9 +16,9 @@ services:
       - key: CODYSSEY_BASE_URL
         value: https://copa.codyssey.kr/v1
       - key: CODYSSEY_MODEL
-        value: gpt-5-mini
+        value: gpt-5.4-mini
       - key: MAX_AI_OUTPUT_TOKENS
-        value: 300
+        value: 500
       - key: CODYSSEY_API_KEY
         sync: false
       - key: FIREBASE_SERVICE_ACCOUNT_JSON

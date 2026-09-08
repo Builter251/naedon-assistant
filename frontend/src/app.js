@@ -3,6 +3,18 @@ const categories = ["주거", "식비", "카페·간식", "교통", "교육·취
 const incomeCategories = ["아르바이트", "용돈"];
 const state = { filters: {}, transactions: [], currentConversationId: null, currentMessages: [], theme: localStorage.getItem("naedon-theme") || "light" };
 
+const metricGuides = {
+  income: { title: "총수입", description: "선택한 기간과 카테고리 조건에 포함된 수입의 합계입니다.", formula: "수입(type=income) 거래 금액의 합" },
+  expense: { title: "총지출", description: "선택한 기간과 카테고리 조건에 포함된 지출의 합계입니다.", formula: "지출(type=expense) 거래 금액의 합" },
+  balance: { title: "남은 금액", description: "조회 조건 안에서 수입으로 지출을 충당하고 남은 금액입니다. 음수이면 지출이 수입보다 많다는 뜻입니다.", formula: "총수입 − 총지출" },
+  trend: { title: "최근 흐름", description: "조회된 마지막 두 달의 지출을 비교한 증감 흐름입니다. 한 달만 조회되면 비교 데이터가 부족하다고 표시합니다.", formula: "(최근 달 지출 − 이전 달 지출) ÷ 이전 달 지출 × 100" },
+  engel: { title: "엥겔지수", description: "전체 소비 중 먹는 데 사용한 금액의 비중입니다. 이 서비스에서는 식비와 카페·간식을 식료 관련 소비로 봅니다.", formula: "(식비 + 카페·간식) ÷ 총지출 × 100" },
+  housing: { title: "주거비 비중", description: "전체 소비 중 월세, 관리비, 공과금처럼 주거 카테고리에 사용한 금액의 비중입니다.", formula: "주거 카테고리 지출 ÷ 총지출 × 100" },
+  fixed: { title: "고정비 부담률", description: "전체 소비 중 매달 반복적으로 발생한다고 표시한 지출의 비중입니다.", formula: "고정비로 표시된 지출 ÷ 총지출 × 100" },
+  discretionary: { title: "선택소비 비중", description: "전체 소비 중 필수소비가 아니라고 표시한 지출의 비중입니다. 줄일 여지가 있는 소비를 살펴보는 참고값입니다.", formula: "필수소비가 아닌 지출 ÷ 총지출 × 100" },
+  propensity: { title: "평균소비성향", description: "조회 조건 안에서 벌어들인 수입 중 소비한 비율입니다. 100%를 넘으면 같은 조건의 지출이 수입보다 많다는 뜻입니다.", formula: "총지출 ÷ 총수입 × 100" },
+};
+
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
 const won = (value) => `${Number(value || 0).toLocaleString("ko-KR")}원`;
@@ -46,6 +58,23 @@ function queryString(filters = state.filters) {
   return params.toString() ? `?${params}` : "";
 }
 
+function filterContext(stats) {
+  const start = state.filters.start_date || stats.period.start;
+  const end = state.filters.end_date || stats.period.end;
+  const period = start && end ? `${start} ~ ${end}` : "전체 기간";
+  const category = state.filters.category || "전체 카테고리";
+  return `${period} · ${category}`;
+}
+
+function openMetricInfo(key) {
+  const guide = metricGuides[key];
+  if (!guide) return;
+  $("#metricInfoTitle").textContent = guide.title;
+  $("#metricInfoDescription").textContent = guide.description;
+  $("#metricInfoFormula").textContent = guide.formula;
+  $("#metricInfoDialog").showModal();
+}
+
 async function checkServer() {
   try {
     const response = await fetch(`${API_BASE}/health`);
@@ -79,6 +108,9 @@ function renderMetrics(stats) {
   $("#incomeCount").textContent = `수입 거래 ${stats.income_count}건`;
   $("#expenseCount").textContent = `지출 거래 ${stats.expense_count}건`;
   $("#periodLabel").textContent = stats.period.label;
+  const context = filterContext(stats);
+  $("#cashflowFilterContext").textContent = context;
+  $("#ratiosFilterContext").textContent = context;
   const metricMap = [
     ["engelIndex", "engelBar", stats.metrics.engel_index],
     ["housingRatio", "housingBar", stats.metrics.housing_ratio],
@@ -117,9 +149,11 @@ async function loadDashboard() {
 async function loadTransactions() {
   try {
     const result = await api(`/api/data${queryString()}`);
-    state.transactions = result.items;
+    state.transactions = [...result.items].sort((left, right) =>
+      right.date.localeCompare(left.date) || String(right.id).localeCompare(String(left.id))
+    );
     $("#transactionTotal").textContent = result.total;
-    $("#transactionTable").innerHTML = result.items.map((row) => `
+    $("#transactionTable").innerHTML = state.transactions.map((row) => `
       <tr>
         <td>${escapeHtml(row.date)}</td><td>${escapeHtml(row.memo)}</td><td>${escapeHtml(row.category)}</td>
         <td><span class="type-badge ${row.type}">${row.type === "income" ? "수입" : "지출"}</span></td>
@@ -259,6 +293,7 @@ function applyTheme(theme) {
 
 function init() {
   $("#filterCategory").insertAdjacentHTML("beforeend", categories.map((category) => `<option value="${category}">${category}</option>`).join(""));
+  state.filters = Object.fromEntries(new FormData($("#filterForm")).entries());
   updateCategoryOptions("expense");
   applyTheme(state.theme);
   $$(".nav-item").forEach((button) => button.addEventListener("click", () => setView(button.dataset.view)));
@@ -267,6 +302,11 @@ function init() {
   $$(".dialog-close").forEach((button) => button.addEventListener("click", () => $("#transactionDialog").close()));
   $("#transactionForm").addEventListener("submit", saveTransaction);
   $("#transactionForm").elements.type.addEventListener("change", (event) => updateCategoryOptions(event.target.value));
+  document.addEventListener("click", (event) => {
+    const infoKey = event.target.closest("[data-metric-info]")?.dataset.metricInfo;
+    if (infoKey) openMetricInfo(infoKey);
+  });
+  $$(".metric-info-close").forEach((button) => button.addEventListener("click", () => $("#metricInfoDialog").close()));
   $("#transactionTable").addEventListener("click", async (event) => {
     const editId = event.target.dataset.edit;
     const deleteId = event.target.dataset.delete;
@@ -281,7 +321,11 @@ function init() {
     state.filters = Object.fromEntries(new FormData(event.currentTarget).entries());
     loadDashboard();
   });
-  $("#resetFilter").addEventListener("click", () => { $("#filterForm").reset(); state.filters = {}; loadDashboard(); });
+  $("#resetFilter").addEventListener("click", () => {
+    $("#filterForm").reset();
+    state.filters = Object.fromEntries(new FormData($("#filterForm")).entries());
+    loadDashboard();
+  });
   $("#exportButton").addEventListener("click", () => { window.location.href = `${API_BASE}/api/data/export.csv${queryString()}`; });
   $("#chatForm").addEventListener("submit", sendChat);
   $("#chatInput").addEventListener("keydown", (event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); $("#chatForm").requestSubmit(); } });

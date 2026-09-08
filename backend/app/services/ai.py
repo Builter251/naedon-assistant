@@ -43,13 +43,13 @@ async def generate_advice(
         "당신은 20대 후반 취업준비생을 위한 소비 분석 비서입니다. "
         "제공된 요약 데이터 안에서만 답하고, 금액과 비율은 구체적으로 제시하세요. "
         "데이터에 없는 사실은 추측하지 말고 부족하다고 밝히세요. "
-        "답변은 한국어로 5문장 이내로 작성하세요.\n\n"
+        "핵심 평가와 실천 조언만 한국어 2문장, 250자 이내로 답하세요.\n\n"
         f"[사용자 데이터 요약]\n{json.dumps(summary, ensure_ascii=False, separators=(',', ':'))}"
     )
     messages: list[dict[str, str]] = [{"role": "system", "content": system_prompt}]
-    for message in recent_messages[-6:]:
+    for message in recent_messages[-4:]:
         if message.get("role") in {"user", "assistant"} and message.get("content"):
-            messages.append({"role": message["role"], "content": str(message["content"])[:2000]})
+            messages.append({"role": message["role"], "content": str(message["content"])[:1000]})
     messages.append({"role": "user", "content": question})
 
     client = AsyncOpenAI(api_key=settings.codyssey_api_key, base_url=settings.codyssey_base_url, timeout=30.0, max_retries=0)
@@ -71,7 +71,15 @@ async def generate_advice(
         status = exc.status_code if 400 <= exc.status_code < 600 else 502
         raise AIServiceError(f"Codyssey API 오류가 발생했습니다. ({status})", status) from exc
 
-    answer = response.choices[0].message.content or "답변을 생성하지 못했습니다."
+    answer = (response.choices[0].message.content or "").strip()
+    if not answer:
+        finish_reason = response.choices[0].finish_reason
+        if finish_reason == "length":
+            raise AIServiceError(
+                "AI가 출력 한도를 내부 추론에 모두 사용했습니다. 잠시 후 다시 시도해주세요.",
+                502,
+            )
+        raise AIServiceError("Codyssey API가 빈 답변을 반환했습니다. 잠시 후 다시 시도해주세요.", 502)
     if response.usage:
         usage = {
             "ai_calls": 1,
@@ -91,4 +99,3 @@ async def generate_advice(
             "measurement": "estimated",
         }
     return AIResult(answer=answer, token_usage=usage)
-

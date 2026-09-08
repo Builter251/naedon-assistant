@@ -21,7 +21,7 @@
 |---|---|
 | 백엔드 | Python 3.12, FastAPI, Pydantic, Uvicorn |
 | 데이터베이스 | Firebase Firestore |
-| AI | Codyssey OpenAI 호환 API, `gpt-5-mini` |
+| AI | Codyssey OpenAI 호환 API, `gpt-5.4-mini` |
 | 분석·그래프 | Python 표준 라이브러리, Matplotlib |
 | 토큰 측정 | API `usage`, tiktoken 대체 측정 |
 | 프론트엔드 | HTML, CSS, JavaScript |
@@ -82,8 +82,8 @@ naedon-assistant/
 | `FIREBASE_SERVICE_ACCOUNT_JSON` | 백엔드 | 서비스 계정 JSON 전체 문자열 또는 로컬 파일 경로 |
 | `CODYSSEY_API_KEY` | 백엔드 | Codyssey에서 발급한 OpenAI 호환 키 |
 | `CODYSSEY_BASE_URL` | 백엔드 | 기본값 `https://copa.codyssey.kr/v1` |
-| `CODYSSEY_MODEL` | 백엔드 | 기본값 `gpt-5-mini` |
-| `MAX_AI_OUTPUT_TOKENS` | 백엔드 | 기본값 `300` |
+| `CODYSSEY_MODEL` | 백엔드 | 기본값 `gpt-5.4-mini` |
+| `MAX_AI_OUTPUT_TOKENS` | 백엔드 | 추론 토큰을 포함한 출력 상한, 기본값 `500` |
 | `ALLOWED_ORIGINS` | 백엔드 | 쉼표로 구분한 프론트 주소 |
 | `API_BASE_URL` | 프론트 빌드 | Render 백엔드 주소 |
 
