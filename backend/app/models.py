@@ -108,7 +108,7 @@ class ConversationResponse(BaseModel):
 
 
 class ChatRequest(BaseModel):
-    message: str = Field(min_length=1, max_length=2_000)
+    message: str = Field(min_length=1, max_length=500)
     conversation_id: str | None = None
 
 
@@ -117,4 +117,3 @@ class ChatResponse(BaseModel):
     conversation_id: str
     source: Literal["local", "ai"]
     token_usage: TokenUsage
-

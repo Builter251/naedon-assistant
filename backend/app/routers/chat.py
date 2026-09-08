@@ -10,6 +10,7 @@ from ..models import ChatRequest, ChatResponse, TokenUsage
 from ..repositories import Repository
 from ..services.ai import AIServiceError, generate_advice
 from ..services.analytics import calculate_statistics, compact_summary
+from ..services.guardrails import prompt_injection_response
 from ..services.local_answers import try_local_answer
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
@@ -37,7 +38,7 @@ async def chat(
             raise HTTPException(status_code=404, detail="대화를 찾을 수 없습니다.")
         recent_messages = conversation.get("messages", [])
 
-    answer = try_local_answer(payload.message, transactions)
+    answer = prompt_injection_response(payload.message) or try_local_answer(payload.message, transactions)
     if answer is not None:
         source = "local"
         usage = TokenUsage().model_dump()
@@ -72,4 +73,3 @@ async def chat(
         source=source,
         token_usage=TokenUsage(**usage),
     )
-
