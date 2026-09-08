@@ -1,7 +1,7 @@
 const API_BASE = (window.APP_CONFIG?.API_BASE_URL || "http://localhost:8000").replace(/\/$/, "");
 const categories = ["주거", "식비", "카페·간식", "교통", "교육·취업", "통신", "구독", "생활", "의류", "의료", "여가"];
 const incomeCategories = ["아르바이트", "용돈"];
-const state = { filters: {}, transactions: [], currentConversationId: null, currentMessages: [], theme: localStorage.getItem("naedon-theme") || "light" };
+const state = { filters: {}, transactions: [], currentConversationId: null, currentMessages: [], theme: localStorage.getItem("naedon-theme") || "light", chartRequestId: 0, chartVersion: "initial" };
 
 const metricGuides = {
   income: { title: "총수입", description: "선택한 기간과 카테고리 조건에 포함된 수입의 합계입니다.", formula: "수입(type=income) 거래 금액의 합" },
@@ -19,8 +19,34 @@ const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
 const won = (value) => `${Number(value || 0).toLocaleString("ko-KR")}원`;
 const percent = (value) => `${Number(value || 0).toFixed(1)}%`;
-const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[character]));
-const isoDate = () => new Date().toISOString().slice(0, 10);
+const isoDate = () => {
+  const localNow = new Date();
+  localNow.setMinutes(localNow.getMinutes() - localNow.getTimezoneOffset());
+  return localNow.toISOString().slice(0, 10);
+};
+
+function makeElement(tag, className = "", text = "") {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== "") node.textContent = String(text);
+  return node;
+}
+
+function appendOption(select, value, label = value, selected = false) {
+  const option = document.createElement("option");
+  option.value = value;
+  option.textContent = label;
+  option.selected = selected;
+  select.append(option);
+}
+
+function setDefaultDashboardFilters() {
+  const form = $("#filterForm");
+  form.elements.start_date.value = "2026-06-01";
+  form.elements.end_date.value = isoDate();
+  form.elements.category.value = "";
+  state.filters = Object.fromEntries(new FormData(form).entries());
+}
 
 function showToast(message) {
   const toast = $("#toast");
@@ -39,7 +65,9 @@ function showNotice(message = "") {
 async function api(path, options = {}) {
   const coldStartTimer = setTimeout(() => showNotice("무료 서버가 깨어나는 중입니다. 첫 연결은 최대 1분 정도 걸릴 수 있습니다."), 3000);
   try {
-    const response = await fetch(`${API_BASE}${path}`, { headers: { "Content-Type": "application/json", ...(options.headers || {}) }, ...options });
+    const headers = { ...(options.headers || {}) };
+    if (options.body && !headers["Content-Type"]) headers["Content-Type"] = "application/json";
+    const response = await fetch(`${API_BASE}${path}`, { ...options, headers });
     if (!response.ok) {
       let message = `요청을 처리하지 못했습니다. (${response.status})`;
       try { message = (await response.json()).detail || message; } catch (_) { /* response is not JSON */ }
@@ -136,28 +164,58 @@ function renderMetrics(stats) {
   ];
   metricMap.forEach(([label, bar, value]) => { $(`#${label}`).textContent = percent(value); $(`#${bar}`).style.width = `${Math.min(value, 100)}%`; });
   $("#propensity").textContent = `평균소비성향 ${percent(stats.metrics.average_propensity_to_consume)}`;
+  const categoryContainer = $("#categoryBreakdown");
+  categoryContainer.replaceChildren();
   const maximum = stats.category_totals[0]?.value || 1;
-  $("#categoryBreakdown").innerHTML = stats.category_totals.slice(0, 5).map((item, index) => `
-    <div class="category-item"><span>${index + 1}위 · ${escapeHtml(item.category)}</span><strong>${won(item.value)}</strong><small>최고 항목 대비 ${Math.round(item.value / maximum * 100)}%</small></div>
-  `).join("") || '<p class="empty-state">표시할 지출이 없습니다.</p>';
+  if (!stats.category_totals.length) {
+    categoryContainer.append(makeElement("p", "empty-state", "표시할 지출이 없습니다."));
+    return;
+  }
+  stats.category_totals.slice(0, 5).forEach((item, index) => {
+    const card = makeElement("div", "category-item");
+    card.append(
+      makeElement("span", "", `${index + 1}위 · ${item.category}`),
+      makeElement("strong", "", won(item.value)),
+      makeElement("small", "", `최고 항목 대비 ${Math.round(item.value / maximum * 100)}%`),
+    );
+    categoryContainer.append(card);
+  });
 }
 
-function refreshChart() {
+function refreshChart(attempt = 0, requestId = null) {
   const image = $("#cashflowChart");
   const loader = $("#chartLoader");
+  const currentRequestId = requestId ?? ++state.chartRequestId;
   loader.classList.remove("hidden");
+  loader.textContent = attempt ? "서버 연결 후 그래프를 다시 불러오는 중입니다…" : "그래프를 만드는 중입니다…";
   image.classList.add("hidden");
-  const params = new URLSearchParams(state.filters);
+  const params = new URLSearchParams();
+  Object.entries(state.filters).forEach(([key, value]) => {
+    if (value) params.set(key, value);
+  });
   params.set("theme", state.theme);
-  params.set("v", Date.now());
-  image.onload = () => { loader.classList.add("hidden"); image.classList.remove("hidden"); };
-  image.onerror = () => { loader.textContent = "그래프를 불러오지 못했습니다."; };
+  params.set("v", state.chartVersion);
+  if (attempt) params.set("retry", attempt);
+  image.onload = () => {
+    if (currentRequestId !== state.chartRequestId) return;
+    loader.classList.add("hidden");
+    image.classList.remove("hidden");
+  };
+  image.onerror = () => {
+    if (currentRequestId !== state.chartRequestId) return;
+    if (attempt < 2) {
+      setTimeout(() => refreshChart(attempt + 1, currentRequestId), 2000);
+      return;
+    }
+    loader.textContent = "그래프를 불러오지 못했습니다. 서버 깨우기를 눌러 다시 시도해주세요.";
+  };
   image.src = `${API_BASE}/api/data/charts/monthly-cashflow.png?${params}`;
 }
 
 async function loadDashboard() {
   try {
     const stats = await api(`/api/data/statistics${queryString()}`);
+    state.chartVersion = stats.monthly.map((row) => `${row.month}-${row.income}-${row.expense}`).join("_") || "empty";
     renderMetrics(stats);
     refreshChart();
   } catch (error) { showNotice(error.message); }
@@ -165,24 +223,56 @@ async function loadDashboard() {
 
 async function loadTransactions() {
   try {
-    const result = await api(`/api/data${queryString()}`);
+    const result = await api("/api/data");
     state.transactions = [...result.items].sort((left, right) =>
       right.date.localeCompare(left.date) || String(right.id).localeCompare(String(left.id))
     );
-    $("#transactionTotal").textContent = result.total;
-    $("#transactionTable").innerHTML = state.transactions.map((row) => `
-      <tr>
-        <td>${escapeHtml(row.date)}</td><td>${escapeHtml(row.memo)}</td><td>${escapeHtml(row.category)}</td>
-        <td><span class="type-badge ${row.type}">${row.type === "income" ? "수입" : "지출"}</span></td>
-        <td class="number">${row.type === "income" ? "+" : "−"}${won(row.value)}</td>
-        <td><div class="row-actions"><button data-edit="${row.id}" type="button">수정</button><button class="delete" data-delete="${row.id}" type="button">삭제</button></div></td>
-      </tr>`).join("") || '<tr><td colspan="6">조건에 맞는 거래가 없습니다.</td></tr>';
+    $("#transactionTotal").textContent = `${result.total}건`;
+    const table = $("#transactionTable");
+    table.replaceChildren();
+    if (!state.transactions.length) {
+      const emptyRow = makeElement("tr");
+      const emptyCell = makeElement("td", "", "저장된 거래가 없습니다.");
+      emptyCell.colSpan = 6;
+      emptyRow.append(emptyCell);
+      table.append(emptyRow);
+      return;
+    }
+    state.transactions.forEach((row) => {
+      const tableRow = makeElement("tr");
+      const typeCell = makeElement("td");
+      const typeBadge = makeElement("span", "type-badge", row.type === "income" ? "수입" : "지출");
+      if (row.type === "expense") typeBadge.classList.add("expense");
+      typeCell.append(typeBadge);
+      const amountCell = makeElement("td", "number", `${row.type === "income" ? "+" : "−"}${won(row.value)}`);
+      const actionCell = makeElement("td");
+      const actions = makeElement("div", "row-actions");
+      const editButton = makeElement("button", "", "수정");
+      editButton.type = "button";
+      editButton.dataset.edit = row.id;
+      const deleteButton = makeElement("button", "delete", "삭제");
+      deleteButton.type = "button";
+      deleteButton.dataset.delete = row.id;
+      actions.append(editButton, deleteButton);
+      actionCell.append(actions);
+      tableRow.append(
+        makeElement("td", "", row.date),
+        makeElement("td", "", row.memo),
+        makeElement("td", "", row.category),
+        typeCell,
+        amountCell,
+        actionCell,
+      );
+      table.append(tableRow);
+    });
   } catch (error) { showNotice(error.message); }
 }
 
 function updateCategoryOptions(type, selected = "") {
   const choices = type === "income" ? incomeCategories : categories;
-  $("#formCategory").innerHTML = choices.map((category) => `<option value="${category}" ${category === selected ? "selected" : ""}>${category}</option>`).join("");
+  const select = $("#formCategory");
+  select.replaceChildren();
+  choices.forEach((category) => appendOption(select, category, category, category === selected));
   const isIncome = type === "income";
   ["is_fixed", "is_essential"].forEach((name) => { const input = $(`#transactionForm [name="${name}"]`); input.checked = false; input.disabled = isIncome; });
 }
@@ -227,17 +317,32 @@ function tokenMeta(usage, source) {
   return `AI 분석 · 호출 ${usage.ai_calls}회 · 입력 ${prefix}${Number(usage.prompt_tokens).toLocaleString()} · 출력 ${prefix}${Number(usage.completion_tokens).toLocaleString()} · 총 ${prefix}${Number(usage.total_tokens).toLocaleString()} tokens`;
 }
 
+function renderEmptyChat(container) {
+  const empty = makeElement("div", "empty-chat");
+  empty.append(
+    makeElement("span", "", "✦"),
+    makeElement("h3", "", "소비 데이터에 대해 물어보세요"),
+    makeElement("p", "", "“7월 총지출은?”은 직접 계산하고, “소비 습관을 평가해줘”는 AI가 분석합니다."),
+  );
+  container.append(empty);
+}
+
 function renderMessages() {
   const container = $("#messages");
+  container.replaceChildren();
   if (!state.currentMessages.length) {
-    container.innerHTML = '<div class="empty-chat"><span>✦</span><h3>소비 데이터에 대해 물어보세요</h3><p>“7월 총지출은?”은 직접 계산하고,<br>“소비 습관을 평가해줘”는 AI가 분석합니다.</p></div>';
+    renderEmptyChat(container);
     $("#conversationTokens").textContent = "0 tokens";
     return;
   }
-  container.innerHTML = state.currentMessages.map((message) => `
-    <div class="message ${message.role}"><div class="message-bubble">${escapeHtml(message.content)}
-      ${message.role === "assistant" ? `<div class="message-meta">${escapeHtml(tokenMeta(message.token_usage, message.source))}</div>` : ""}
-    </div></div>`).join("");
+  state.currentMessages.forEach((message) => {
+    const role = message.role === "user" ? "user" : "assistant";
+    const wrapper = makeElement("div", `message ${role}`);
+    const bubble = makeElement("div", "message-bubble", message.content);
+    if (role === "assistant") bubble.append(makeElement("div", "message-meta", tokenMeta(message.token_usage, message.source)));
+    wrapper.append(bubble);
+    container.append(wrapper);
+  });
   const total = state.currentMessages.reduce((sum, message) => sum + Number(message.token_usage?.total_tokens || 0), 0);
   $("#conversationTokens").textContent = `${total.toLocaleString()} tokens`;
   container.scrollTop = container.scrollHeight;
@@ -246,7 +351,12 @@ function renderMessages() {
 function addTyping() {
   const container = $("#messages");
   container.querySelector(".empty-chat")?.remove();
-  container.insertAdjacentHTML("beforeend", '<div class="message assistant" id="typingMessage"><div class="message-bubble typing"><i></i><i></i><i></i></div></div>');
+  const wrapper = makeElement("div", "message assistant");
+  wrapper.id = "typingMessage";
+  const bubble = makeElement("div", "message-bubble typing");
+  bubble.append(makeElement("i"), makeElement("i"), makeElement("i"));
+  wrapper.append(bubble);
+  container.append(wrapper);
   container.scrollTop = container.scrollHeight;
 }
 
@@ -276,11 +386,29 @@ async function sendChat(event) {
 async function loadConversations() {
   try {
     const result = await api("/api/conversations");
-    $("#conversationList").innerHTML = result.items.map((conversation) => `
-      <div class="conversation-item ${conversation.id === state.currentConversationId ? "active" : ""}">
-        <button class="conversation-open" data-conversation="${conversation.id}" type="button"><strong>${escapeHtml(conversation.title)}</strong><small>${escapeHtml(conversation.updated_at.slice(0, 10))} · ${conversation.messages.length}개 메시지</small></button>
-        <button class="conversation-delete" data-conversation-delete="${conversation.id}" type="button" aria-label="대화 삭제">×</button>
-      </div>`).join("") || '<p class="empty-state">저장된 대화가 없습니다.</p>';
+    const list = $("#conversationList");
+    list.replaceChildren();
+    if (!result.items.length) {
+      list.append(makeElement("p", "empty-state", "저장된 대화가 없습니다."));
+      return;
+    }
+    result.items.forEach((conversation) => {
+      const item = makeElement("div", "conversation-item");
+      if (conversation.id === state.currentConversationId) item.classList.add("active");
+      const openButton = makeElement("button", "conversation-open");
+      openButton.type = "button";
+      openButton.dataset.conversation = conversation.id;
+      openButton.append(
+        makeElement("strong", "", conversation.title),
+        makeElement("small", "", `${conversation.updated_at.slice(0, 10)} · ${conversation.messages.length}개 메시지`),
+      );
+      const deleteButton = makeElement("button", "conversation-delete", "×");
+      deleteButton.type = "button";
+      deleteButton.dataset.conversationDelete = conversation.id;
+      deleteButton.setAttribute("aria-label", "대화 삭제");
+      item.append(openButton, deleteButton);
+      list.append(item);
+    });
   } catch (error) { showNotice(error.message); }
 }
 
@@ -309,8 +437,9 @@ function applyTheme(theme) {
 }
 
 function init() {
-  $("#filterCategory").insertAdjacentHTML("beforeend", categories.map((category) => `<option value="${category}">${category}</option>`).join(""));
-  state.filters = Object.fromEntries(new FormData($("#filterForm")).entries());
+  const filterCategory = $("#filterCategory");
+  categories.forEach((category) => appendOption(filterCategory, category));
+  setDefaultDashboardFilters();
   updateCategoryOptions("expense");
   applyTheme(state.theme);
   $$(".nav-item").forEach((button) => button.addEventListener("click", () => setView(button.dataset.view)));
@@ -340,8 +469,7 @@ function init() {
     loadDashboard();
   });
   $("#resetFilter").addEventListener("click", () => {
-    $("#filterForm").reset();
-    state.filters = Object.fromEntries(new FormData($("#filterForm")).entries());
+    setDefaultDashboardFilters();
     loadDashboard();
   });
   $("#exportButton").addEventListener("click", () => { window.location.href = `${API_BASE}/api/data/export.csv${queryString()}`; });

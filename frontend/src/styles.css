@@ -109,6 +109,7 @@ input:focus, select:focus, textarea:focus { border-color: var(--brand); box-shad
 .category-item strong { display: block; margin: 8px 0 3px; font-size: 1.03rem; }
 .table-panel { overflow: hidden; }
 .table-panel > .panel-heading { padding: 22px 24px 0; }
+.table-panel .count-pill { margin-left: 10px; vertical-align: 2px; }
 .table-wrap { overflow: auto; max-height: calc(100vh - 190px); }
 table { width: 100%; border-collapse: collapse; white-space: nowrap; }
 th, td { padding: 14px 18px; border-top: 1px solid var(--line); text-align: left; }

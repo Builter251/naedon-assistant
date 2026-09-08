@@ -40,7 +40,7 @@
         <section class="view active" id="dashboardView" data-page-title="한눈에 보는 내 소비">
           <form class="filter-bar" id="filterForm">
             <label>시작일<input type="date" name="start_date" value="2026-06-01" /></label>
-            <label>종료일<input type="date" name="end_date" value="2026-08-31" /></label>
+            <label>종료일<input type="date" name="end_date" /></label>
             <label>카테고리<select name="category" id="filterCategory"><option value="">전체 카테고리</option></select></label>
             <button class="secondary-button" type="submit">적용</button>
             <button class="text-button" id="resetFilter" type="button">초기화</button>
@@ -55,7 +55,7 @@
 
           <div class="dashboard-grid">
             <article class="panel chart-panel">
-              <div class="panel-heading"><div><p class="eyebrow">CASH FLOW</p><h2>월별 수입과 지출</h2><p class="filter-context" id="cashflowFilterContext">전체 기간 · 전체 카테고리</p></div><span class="no-token-badge">AI 토큰 0</span></div>
+              <div class="panel-heading"><div><p class="eyebrow">CASH FLOW</p><h2>월별 수입과 지출</h2><p class="filter-context" id="cashflowFilterContext">전체 기간 · 전체 카테고리</p></div></div>
               <div class="chart-frame"><div class="chart-loader" id="chartLoader">그래프를 만드는 중입니다…</div><img id="cashflowChart" alt="월별 수입과 지출 그래프" /></div>
             </article>
             <article class="panel insight-panel">
@@ -76,7 +76,7 @@
 
         <section class="view" id="transactionsView" data-page-title="거래 내역 관리">
           <article class="panel table-panel">
-            <div class="panel-heading"><div><p class="eyebrow">TRANSACTIONS</p><h2>저장된 거래 <span id="transactionTotal" class="count-pill">0</span></h2></div></div>
+            <div class="panel-heading"><div><p class="eyebrow">TRANSACTIONS</p><h2>저장된 거래 <span id="transactionTotal" class="count-pill">0건</span></h2></div></div>
             <div class="table-wrap">
               <table>
                 <thead><tr><th>날짜</th><th>내용</th><th>카테고리</th><th>구분</th><th class="number">금액</th><th>관리</th></tr></thead>

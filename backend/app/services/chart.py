@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 import os
+from functools import lru_cache
 from io import BytesIO
 from typing import Any
 
@@ -14,9 +16,16 @@ from matplotlib.ticker import FuncFormatter
 
 
 def render_monthly_cashflow(statistics: dict[str, Any], theme: str = "light") -> bytes:
-    months = [row["month"] for row in statistics["monthly"]]
-    incomes = [row["income"] for row in statistics["monthly"]]
-    expenses = [row["expense"] for row in statistics["monthly"]]
+    monthly_json = json.dumps(statistics["monthly"], ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return _render_monthly_cashflow(monthly_json, theme)
+
+
+@lru_cache(maxsize=32)
+def _render_monthly_cashflow(monthly_json: str, theme: str) -> bytes:
+    monthly = json.loads(monthly_json)
+    months = [row["month"] for row in monthly]
+    incomes = [row["income"] for row in monthly]
+    expenses = [row["expense"] for row in monthly]
 
     dark = theme == "dark"
     background = "#111827" if dark else "#ffffff"

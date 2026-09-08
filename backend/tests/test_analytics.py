@@ -1,4 +1,5 @@
 from app.services.analytics import calculate_statistics
+from app.services.chart import _render_monthly_cashflow, render_monthly_cashflow
 
 
 def test_seed_statistics(repository):
@@ -18,3 +19,13 @@ def test_statistics_are_safe_for_empty_data():
     assert result["metrics"]["engel_index"] == 0
     assert result["monthly"] == []
 
+
+def test_chart_reuses_cached_image(repository):
+    statistics = calculate_statistics(repository.list_transactions())
+    _render_monthly_cashflow.cache_clear()
+
+    first = render_monthly_cashflow(statistics, "light")
+    second = render_monthly_cashflow(statistics, "light")
+
+    assert first == second
+    assert _render_monthly_cashflow.cache_info().hits == 1

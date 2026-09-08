@@ -2,6 +2,7 @@ def test_data_list_summary_and_chart(client):
     listing = client.get("/api/data")
     assert listing.status_code == 200
     assert listing.json()["total"] == 180
+    assert listing.json()["items"][0]["date"] >= listing.json()["items"][-1]["date"]
 
     summary = client.get("/api/data/summary")
     assert summary.status_code == 200

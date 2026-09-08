@@ -40,7 +40,11 @@ def list_data(
     type: TransactionType | None = Query(default=None),
     repository: Repository = Depends(get_repository),
 ):
-    items = _filtered(repository, start_date, end_date, category, type)
+    items = sorted(
+        _filtered(repository, start_date, end_date, category, type),
+        key=lambda row: (row["date"], row.get("id", "")),
+        reverse=True,
+    )
     return {"items": items, "total": len(items)}
 
 
@@ -95,7 +99,7 @@ def monthly_cashflow_chart(
     if not rows:
         raise HTTPException(status_code=404, detail="그래프로 표시할 데이터가 없습니다.")
     image = render_monthly_cashflow(calculate_statistics(rows), theme)
-    return Response(content=image, media_type="image/png", headers={"Cache-Control": "no-store"})
+    return Response(content=image, media_type="image/png", headers={"Cache-Control": "public, max-age=300"})
 
 
 @router.put("/{document_id}", response_model=TransactionResponse)
@@ -111,4 +115,3 @@ def delete_data(document_id: str, repository: Repository = Depends(get_repositor
     if not repository.delete_transaction(document_id):
         raise HTTPException(status_code=404, detail="거래를 찾을 수 없습니다.")
     return Response(status_code=status.HTTP_204_NO_CONTENT)
-
