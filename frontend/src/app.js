@@ -75,18 +75,35 @@ function openMetricInfo(key) {
   $("#metricInfoDialog").showModal();
 }
 
-async function checkServer() {
+async function checkServer(manual = false) {
+  const button = $("#wakeServerButton");
+  button.disabled = true;
+  button.textContent = "서버 깨우는 중…";
+  if (manual) showNotice("무료 서버를 시작하고 있습니다. 최대 1분 정도 걸릴 수 있습니다.");
   try {
     const response = await fetch(`${API_BASE}/health`);
     if (!response.ok) throw new Error();
     $("#statusDot").className = "status-dot online";
     $("#serverStatus").textContent = "서버 연결됨";
     showNotice("");
+    if (manual) showToast("서버가 준비되었습니다.");
+    return true;
   } catch (_) {
     $("#statusDot").className = "status-dot offline";
     $("#serverStatus").textContent = "서버 연결 안 됨";
     showNotice("백엔드 서버에 연결할 수 없습니다. API 주소와 서버 상태를 확인해주세요.");
+    return false;
+  } finally {
+    button.disabled = false;
+    button.textContent = "서버 깨우기";
   }
+}
+
+async function wakeServer() {
+  if (!await checkServer(true)) return;
+  await loadDashboard();
+  if ($("#transactionsView").classList.contains("active")) await loadTransactions();
+  if ($("#chatView").classList.contains("active")) await loadConversations();
 }
 
 function setView(viewName) {
@@ -298,6 +315,7 @@ function init() {
   applyTheme(state.theme);
   $$(".nav-item").forEach((button) => button.addEventListener("click", () => setView(button.dataset.view)));
   $("#themeToggle").addEventListener("click", () => applyTheme(state.theme === "light" ? "dark" : "light"));
+  $("#wakeServerButton").addEventListener("click", wakeServer);
   $("#addTransactionButton").addEventListener("click", () => openTransactionDialog());
   $$(".dialog-close").forEach((button) => button.addEventListener("click", () => $("#transactionDialog").close()));
   $("#transactionForm").addEventListener("submit", saveTransaction);
