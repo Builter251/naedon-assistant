@@ -89,6 +89,19 @@ def test_prompt_injection_is_blocked_without_ai_call(client, monkeypatch):
     assert "보안상" in response.json()["answer"]
 
 
+def test_out_of_scope_chat_is_blocked_without_ai_call(client, monkeypatch):
+    async def unexpected_ai_call(*args, **kwargs):
+        raise AssertionError("out-of-scope questions must not call the AI API")
+
+    monkeypatch.setattr("app.routers.chat.generate_advice", unexpected_ai_call)
+    response = client.post("/api/chat", json={"message": "오늘 날씨를 알려줘"})
+
+    assert response.status_code == 200
+    assert response.json()["source"] == "local"
+    assert response.json()["token_usage"]["total_tokens"] == 0
+    assert response.json()["answer"] == "내돈비서는 소비·수입·예산 등 개인 재정 데이터에 관한 질문만 답변할 수 있습니다."
+
+
 def test_export_csv(client):
     response = client.get("/api/data/export.csv?category=식비")
     assert response.status_code == 200
