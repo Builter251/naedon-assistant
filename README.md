@@ -168,7 +168,7 @@ python scripts/seed_firestore.py ../data/jobseeker_spending_2026-06_to_2026-08.c
 }
 ```
 
-`measurement` 값은 `not_used`, `provider`, `estimated`, `unavailable` 중 하나입니다. API가 `usage`를 반환하면 그 값을 사용하고, 없으면 `tiktoken`으로 추정합니다.
+`measurement` 값은 `not_used`, `provider`, `estimated`, `unavailable` 중 하나입니다. API가 `usage`를 반환하면 그 값을 사용하고, 없으면 `tiktoken`으로 추정합니다. 화면의 수치는 성공한 현재 대화에서 API가 보고한 원본 토큰 합계입니다. Codyssey 콘솔의 `차감 토큰`은 모델별 가중치를 적용하므로 이 값과 다를 수 있으며, 실패한 호출이나 다른 클라이언트의 호출도 현재 대화 합계에는 포함되지 않습니다.
 
 ## 테스트
 

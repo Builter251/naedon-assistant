@@ -326,10 +326,10 @@ async function saveTransaction(event) {
 }
 
 function tokenMeta(usage, source) {
-  if (source === "local") return "직접 계산 · AI 호출 0회 · 0 tokens";
-  if (!usage || usage.measurement === "unavailable") return "AI 분석 · 토큰 사용량 확인 불가";
+  if (source === "local") return "직접 계산 · AI API 호출 0회 · 0 tokens";
+  if (!usage || usage.measurement === "unavailable") return "AI 분석 · API 토큰 확인 불가";
   const prefix = usage.measurement === "estimated" ? "예상 " : "";
-  return `AI 분석 · 호출 ${usage.ai_calls}회 · 입력 ${prefix}${Number(usage.prompt_tokens).toLocaleString()} · 출력 ${prefix}${Number(usage.completion_tokens).toLocaleString()} · 총 ${prefix}${Number(usage.total_tokens).toLocaleString()} tokens`;
+  return `AI 분석 · API 호출 ${usage.ai_calls}회 · ${prefix}입력 ${Number(usage.prompt_tokens).toLocaleString()} · ${prefix}출력 ${Number(usage.completion_tokens).toLocaleString()} · ${prefix}합계 ${Number(usage.total_tokens).toLocaleString()} tokens`;
 }
 
 function renderEmptyChat(container) {
