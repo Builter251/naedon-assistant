@@ -6,7 +6,7 @@ cd "$script_dir"
 
 rm -rf dist
 mkdir -p dist
-cp src/index.html src/styles.css src/app.js dist/
+cp src/index.html src/styles.css src/app.js src/favicon.svg dist/
 
 api_base_url=${API_BASE_URL:-http://localhost:8000}
 escaped_url=$(printf '%s' "$api_base_url" | sed 's/[\\&"]/\\&/g')

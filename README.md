@@ -63,6 +63,93 @@ flowchart LR
 
 시스템 지침의 무시·변경·공개를 요구하는 대표적인 프롬프트 인젝션 패턴은 Python에서 먼저 검사합니다. 의심 요청은 AI를 호출하지 않고 안전 안내를 반환하며, 정상 요청에도 시스템 지침과 역할을 변경하지 말라는 규칙을 함께 적용합니다. 개인 소비·수입·예산 데이터와 무관한 질문도 Python 규칙으로 차단하고 고정 안내를 반환하므로 AI 토큰을 사용하지 않습니다.
 
+## 프로젝트 개념 정리
+
+### 전체 서비스의 관계
+
+```mermaid
+flowchart LR
+    B[사용자 브라우저] -->|HTML·CSS·JavaScript 다운로드| V[Vercel 프론트엔드]
+    B -->|HTTPS·JSON API 요청| R[Render의 FastAPI·Uvicorn]
+    R -->|firebase-admin SDK| F[(Firestore)]
+    R -->|해석 질문만 1회 호출| C[Codyssey AI API]
+    R -->|OpenAPI 문서 자동 생성| S[Swagger UI /docs]
+```
+
+- **Vercel**은 사용자가 보는 정적 프론트엔드 파일을 빌드하고 배포한다. 브라우저에서 실행된 JavaScript가 Render API를 호출한다.
+- **Render**는 FastAPI 백엔드 프로세스를 실행한다. 데이터 검증·통계·질문 분류·AI 호출·Firestore 접근은 여기서 처리한다.
+- **Firestore**는 거래와 대화 기록을 영구 저장한다. Render가 재시작돼도 데이터는 유지된다.
+- **Swagger UI**는 별도 서버가 아니라 FastAPI가 OpenAPI 명세로 자동 생성하는 API 시험 화면이다. Render 주소의 `/docs`에서 확인한다.
+
+`render.yaml`은 Render 배포 설정을 코드로 기록한 파일이다. 이 프로젝트에서는 Python 버전, `backend` 루트 폴더, 패키지 설치 명령, Uvicorn 실행 명령, 싱가포르 리전, `/health` 상태 확인 경로와 필요한 환경 변수 이름을 정의한다. `sync: false`인 API 키와 Firebase 키의 실제 값은 파일에 넣지 않고 Render 대시보드에서 등록한다.
+
+### Firebase와 Firestore
+
+**Firebase**는 Google이 제공하는 앱 개발 플랫폼 전체를 뜻한다. 인증, 데이터베이스, 호스팅 등 여러 제품을 포함한다. **Cloud Firestore**는 그중 문서 형태로 데이터를 저장하는 관리형 NoSQL 데이터베이스다. 이 프로젝트는 Firebase 전체 기능 중 Firestore를 사용하며, `data` 컬렉션에는 거래를, `conversations` 컬렉션에는 대화와 메시지를 저장한다.
+
+Firestore는 서버 설치·패치·백업 장비를 직접 운영하지 않아도 되는 관리형 서비스다. 이런 실행 방식을 넓은 의미에서 **서버리스**라고 한다. 서버리스는 서버가 없다는 뜻이 아니라 사용자가 서버 운영을 직접 관리하지 않는다는 뜻이다. Vercel의 정적 배포와 Firestore는 서버리스 성격이 강하지만, 이 프로젝트의 Render 백엔드는 Uvicorn 프로세스를 계속 실행하는 관리형 웹 서비스이므로 엄밀히는 일반적인 함수형 서버리스와 다르다.
+
+무료 Render 인스턴스는 일정 시간 요청이 없으면 잠들 수 있다. 다음 요청에서 실행 환경과 앱을 다시 시작하는 시간이 **콜드 스타트**다. 이때 첫 응답이 수십 초 늦어질 수 있어 화면은 3초 이상 지연되면 안내를 표시한다. `서버 깨우기` 버튼은 `/health`를 호출하고, 준비가 끝나면 현재 화면의 데이터를 다시 불러온다.
+
+### API와 HTTP 메서드
+
+**API(Application Programming Interface)**는 한 소프트웨어가 다른 소프트웨어의 기능을 정해진 형식으로 사용하는 약속이다. 라이브러리의 함수도 API가 될 수 있다. **웹 API**는 이 약속을 URL, HTTP 메서드, 요청·응답 본문(JSON 등)으로 제공한다. 내돈비서 프론트엔드는 Render의 웹 API를 사용한다.
+
+HTML은 화면 구조를 표현하는 언어이고, `GET`, `POST`, `PUT`, `DELETE`는 **HTML 메서드가 아니라 HTTP 메서드**다. CRUD와의 관계는 다음과 같다.
+
+| CRUD | 의미 | 주로 사용하는 HTTP 메서드 | 이 프로젝트의 예 |
+|---|---|---|---|
+| Create | 새 데이터 생성 | `POST` | `POST /api/data` |
+| Read | 데이터 조회 | `GET` | `GET /api/data` |
+| Update | 기존 데이터 전체 수정 | `PUT` | `PUT /api/data/{id}` |
+| Delete | 데이터 삭제 | `DELETE` | `DELETE /api/data/{id}` |
+
+`GET /health`는 서버가 요청에 응답할 수 있는지와 현재 데이터 저장 방식이 무엇인지 확인하는 가벼운 상태 확인 API다. Render도 이 경로로 배포 상태를 검사하고, 프론트의 서버 상태 표시와 깨우기 버튼도 이 API를 사용한다. 데이터나 AI를 조회하지 않으므로 확인 비용이 작다.
+
+### FastAPI, Uvicorn, Pydantic
+
+**FastAPI**는 Python으로 웹 API를 만드는 프레임워크다. URL과 HTTP 메서드를 Python 함수에 연결하고, JSON 변환, 오류 응답, OpenAPI 문서와 Swagger UI 생성을 지원한다. 이 프로젝트는 통계 코드와 같은 Python 생태계를 사용할 수 있고, 비동기 AI 호출을 처리하며, Pydantic 검증과 `/docs` 문서를 적은 코드로 제공할 수 있어 FastAPI를 선택했다. 라우터는 데이터·대화·채팅 기능으로 나누고 계산과 외부 API 호출은 서비스 함수로 분리했다.
+
+FastAPI 자체는 네트워크 포트를 열어 요청을 받지 않는다. **Uvicorn**이 ASGI 서버로서 HTTP 연결을 받고 FastAPI 앱에 요청을 전달한 뒤 응답을 브라우저로 보낸다. Render의 실행 명령도 `uvicorn app.main:app --host 0.0.0.0 --port $PORT`이다.
+
+**Pydantic**은 Python 타입 선언을 기준으로 요청 데이터를 검사하고 변환하는 라이브러리다. 거래 날짜가 날짜 형식인지, 금액이 양수인지, 메모가 비어 있지 않은지, `type`과 `category` 조합이 맞는지 검사한다. 잘못된 입력은 저장 전에 FastAPI의 `422` 응답으로 거부되므로 Firestore 데이터 형식을 일정하게 유지할 수 있다.
+
+### CORS
+
+**CORS(Cross-Origin Resource Sharing)**는 브라우저가 다른 출처의 서버를 호출해도 되는지 결정하는 규칙이다. 출처는 프로토콜·도메인·포트의 조합이다. 따라서 `https://naedon-assistant.vercel.app`과 `https://naedon-assistant-api.onrender.com`은 서로 다른 출처다.
+
+초기 배포에서는 Render 응답에 Vercel 출처를 허용하는 헤더가 없어 브라우저의 사전 요청(`OPTIONS`, preflight)이 차단됐고 화면에 `Failed to fetch`가 표시됐다. Render의 `ALLOWED_ORIGINS`에 실제 Vercel 주소를 넣고 FastAPI `CORSMiddleware`가 `Access-Control-Allow-Origin` 헤더를 반환하도록 해결했다. CORS는 브라우저의 접근 통제이며 사용자 로그인이나 API 인증을 대신하지 않는다.
+
+### 질문 분류와 AI 처리
+
+`POST /api/chat`은 다음 순서로 질문을 처리한다.
+
+1. 시스템 지침 무시·역할 변경·프롬프트 공개 같은 인젝션 패턴이면 고정 보안 안내를 반환한다.
+2. 소비·지출·수입·예산·저축·생활비·거래·소비 지표 등의 관련 단어가 없으면 서비스 범위 안내를 반환한다. 월 표현과 분석 표현의 조합, 직전 소비 대화를 잇는 짧은 후속 질문은 관련 질문으로 인정한다.
+3. 관련 질문 중 Python으로 계산 가능한 질문이면 Firestore 데이터를 집계하고 문장 템플릿으로 답한다.
+4. 평가·조언처럼 해석이 필요한 질문만 압축 요약과 최근 메시지를 Codyssey API에 보내 답을 생성한다.
+5. 어느 경로든 질문과 답변, 처리 방식, 토큰 정보를 `conversations`에 저장한다.
+
+범위 판정은 AI를 호출하는 의미 분석이 아니라 `guardrails.py`의 정규식과 관련 단어 목록을 사용하는 로컬 규칙이다. 따라서 토큰을 쓰지 않고 빠르지만 새로운 표현은 목록을 보완해야 할 수 있다. 예를 들어 “오늘 날씨를 알려줘”는 고정 안내와 0토큰을 반환하고, “8월 소비 흐름은 어때?”는 소비 분석 질문으로 통과한다.
+
+Python이 직접 답할 수 있는 질문은 다음과 같다.
+
+| 질문 종류 | 계산 또는 조회 내용 |
+|---|---|
+| 총수입·총지출·잔액 | 수입 합계, 지출 합계, 두 값의 차이 |
+| 엥겔지수 | `(식비 + 카페·간식) / 총지출 × 100` |
+| 평균소비성향 | `총지출 / 총수입 × 100` |
+| 주거비·고정비·선택소비 | 각 금액과 총지출 대비 비율 |
+| 평균 지출·거래 건수 | 지출 거래 평균, 수입·지출 건수 |
+| 가장 큰 카테고리 | 카테고리별 지출 합계의 1위 |
+| 데이터 기간·특정 월 | 저장된 기간 또는 질문에 포함된 월의 통계 |
+
+질문에 `왜`, `평가`, `조언`, `개선`, `추천`, `계획`, `습관`, `분석`, `줄이기`, `어떻게`처럼 해석이 필요한 표현이 있으면 AI 경로로 보낸다. 이때 원본 거래 180여 건은 보내지 않고 기간·건수·수입·지출·잔액·핵심 비율·추세·상위 카테고리 5개·월별 수입과 지출만 JSON으로 압축한다. 여기에 최근 대화 최대 4개 메시지와 현재 질문을 더해 시스템 프롬프트로 전달한다. 답변은 2문장·250자 이내, 출력 상한 500토큰으로 요청하며 호출은 최대 1회다.
+
+### venv
+
+**venv**는 프로젝트 전용 Python 가상환경이다. FastAPI, Firebase Admin, Matplotlib 같은 패키지를 운영체제의 전역 Python과 분리해 설치한다. 프로젝트마다 서로 다른 패키지 버전을 사용해도 충돌하지 않고, `requirements.txt`로 배포 환경과 같은 의존성을 재현하기 쉬워진다. `source .venv/bin/activate`를 실행하면 현재 터미널의 `python`과 `pip`가 저장소의 `.venv`를 가리킨다. `.venv`는 다시 만들 수 있으므로 Git에는 올리지 않는다.
+
 ## 프로젝트 구조
 
 ```text
@@ -100,11 +187,12 @@ naedon-assistant/
 Python 3.10 이상이 필요합니다.
 
 ```bash
-cd backend
-python -m venv .venv
+cd naedon-assistant
+python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements-dev.txt
-cp ../.env.example .env
+pip install -r backend/requirements-dev.txt
+cp .env.example backend/.env
+cd backend
 uvicorn app.main:app --reload
 ```
 
@@ -217,10 +305,18 @@ pytest
 
 ## 제출 스크린샷
 
-README와 제출물에 다음 화면을 첨부합니다.
+### 데이터 요약·그래프
 
-1. 데이터 요약과 질문·답변이 함께 보이는 채팅 화면
-2. 추가 또는 수정된 거래가 보이는 거래 관리 화면
-3. 이전 대화를 선택해 불러온 화면
-4. 월별 수입·지출 그래프와 추가 소비 지표
-5. Render Swagger UI
+![데이터 요약과 월별 수입·지출 그래프](output/playwright/dashboard.png)
+
+### 거래 관리
+
+![추가된 거래와 수정·삭제 기능](output/playwright/transactions.png)
+
+### AI 답변·대화 불러오기
+
+![저장된 대화를 불러온 AI 상담 화면](output/playwright/chat-history.png)
+
+### Swagger UI
+
+![Render에 배포된 FastAPI Swagger UI](output/playwright/swagger.png)
