@@ -1,7 +1,9 @@
 const API_BASE = (window.APP_CONFIG?.API_BASE_URL || "http://localhost:8000").replace(/\/$/, "");
 const categories = ["주거", "식비", "카페·간식", "교통", "교육·취업", "통신", "구독", "생활", "의류", "의료", "여가"];
 const incomeCategories = ["아르바이트", "용돈"];
-const state = { filters: {}, transactions: [], currentConversationId: null, currentMessages: [], theme: localStorage.getItem("naedon-theme") || "light", chartRequestId: 0, chartVersion: "initial" };
+const state = { filters: {}, transactions: [], currentConversationId: null, currentMessages: [], theme: localStorage.getItem("naedon-theme") || "light", chartRequestId: 0, chartVersion: "initial", serverReady: false };
+const COLD_START_NOTICE = "무료 서버가 깨어나는 중입니다. 첫 연결은 최대 1분 정도 걸릴 수 있습니다.";
+const SLOW_REQUEST_NOTICE = "서버 응답을 기다리는 중입니다.";
 
 const metricGuides = {
   income: { title: "총수입", description: "선택한 기간과 카테고리 조건에 포함된 수입의 합계입니다.", formula: "수입(type=income) 거래 금액의 합" },
@@ -62,12 +64,20 @@ function showNotice(message = "") {
   notice.classList.toggle("hidden", !message);
 }
 
+function clearWaitingNotice() {
+  const message = $("#notice").textContent;
+  if (message === COLD_START_NOTICE || message === SLOW_REQUEST_NOTICE) showNotice("");
+}
+
 async function api(path, options = {}) {
-  const coldStartTimer = setTimeout(() => showNotice("무료 서버가 깨어나는 중입니다. 첫 연결은 최대 1분 정도 걸릴 수 있습니다."), 3000);
+  const slowRequestTimer = setTimeout(() => {
+    showNotice(state.serverReady ? SLOW_REQUEST_NOTICE : COLD_START_NOTICE);
+  }, 3000);
   try {
     const headers = { ...(options.headers || {}) };
     if (options.body && !headers["Content-Type"]) headers["Content-Type"] = "application/json";
     const response = await fetch(`${API_BASE}${path}`, { ...options, headers });
+    state.serverReady = true;
     if (!response.ok) {
       let message = `요청을 처리하지 못했습니다. (${response.status})`;
       try { message = (await response.json()).detail || message; } catch (_) { /* response is not JSON */ }
@@ -76,7 +86,8 @@ async function api(path, options = {}) {
     if (response.status === 204) return null;
     return response.json();
   } finally {
-    clearTimeout(coldStartTimer);
+    clearTimeout(slowRequestTimer);
+    clearWaitingNotice();
   }
 }
 
@@ -107,21 +118,25 @@ async function checkServer(manual = false) {
   const button = $("#wakeServerButton");
   button.disabled = true;
   button.textContent = "서버 깨우는 중…";
-  if (manual) showNotice("무료 서버를 시작하고 있습니다. 최대 1분 정도 걸릴 수 있습니다.");
+  const coldStartTimer = manual ? null : setTimeout(() => showNotice(COLD_START_NOTICE), 3000);
+  if (manual) showNotice(COLD_START_NOTICE);
   try {
     const response = await fetch(`${API_BASE}/health`);
     if (!response.ok) throw new Error();
+    state.serverReady = true;
     $("#statusDot").className = "status-dot online";
     $("#serverStatus").textContent = "서버 연결됨";
     showNotice("");
     if (manual) showToast("서버가 준비되었습니다.");
     return true;
   } catch (_) {
+    state.serverReady = false;
     $("#statusDot").className = "status-dot offline";
     $("#serverStatus").textContent = "서버 연결 안 됨";
     showNotice("백엔드 서버에 연결할 수 없습니다. API 주소와 서버 상태를 확인해주세요.");
     return false;
   } finally {
+    if (coldStartTimer) clearTimeout(coldStartTimer);
     button.disabled = false;
     button.textContent = "서버 깨우기";
   }
@@ -433,7 +448,11 @@ function applyTheme(theme) {
   state.theme = theme;
   document.documentElement.dataset.theme = theme;
   localStorage.setItem("naedon-theme", theme);
-  if ($("#dashboardView").classList.contains("active")) refreshChart();
+  if ($("#dashboardView").classList.contains("active") && state.chartVersion !== "initial") refreshChart();
+}
+
+async function initializeDashboard() {
+  if (await checkServer()) await loadDashboard();
 }
 
 function init() {
@@ -485,8 +504,7 @@ function init() {
       catch (error) { showToast(error.message); }
     }
   });
-  checkServer();
-  loadDashboard();
+  initializeDashboard();
 }
 
 document.addEventListener("DOMContentLoaded", init);
